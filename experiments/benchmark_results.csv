@@ -1,0 +1,4 @@
+Run,n_estimators,Accuracy,Precision,Recall,F1-score
+RF_n_estimators_50,50,0.9000,0.9024,0.9000,0.8997
+RF_n_estimators_100,100,0.9000,0.9024,0.9000,0.8997
+RF_n_estimators_200,200,0.9000,0.9024,0.9000,0.8997
