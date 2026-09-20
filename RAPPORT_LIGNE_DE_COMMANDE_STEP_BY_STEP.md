@@ -17,9 +17,13 @@
 5. [Étape 6 — Entraînement et suivi MLflow (`src/train.py`)](#étape-6--entraînement-et-suivi-mlflow-srctrainpy)
 6. [Étape 7 — Visualisation de l'interface MLflow](#étape-7--visualisation-de-linterface-mlflow)
 7. [Étape 8 — Évaluation du modèle (`src/evaluate.py`)](#étape-8--évaluation-du-modèle-srcevaluatepy)
-8. [Étape 9 — Inférence en production (`src/predict.py`)](#étape-9--inférence-en-production-srcpredictpy)
-9. [Réponses officielles aux Questions 1 à 19](#réponses-officielles-aux-questions-1-à-19)
-10. [Validation des Mini-Défis 1 à 4](#validation-des-mini-défis-1-à-4)
+8. [Étape 9 — Charger le modèle et prédire (`src/predict.py`)](#étape-9--charger-le-modèle-et-prédire-srcpredictpy)
+9. [Étape 10 — Première activité de Data Drift (`src/drift.py`)](#étape-10--première-activité-de-data-drift-srcdriftpy)
+10. [Étape 11 — Versionnement avec Git](#étape-11--versionnement-avec-git)
+11. [Étape 12 — Organisation finale du projet](#étape-12--organisation-finale-du-projet)
+12. [Étape 13 — Livrables remis](#étape-13--livrables-remis)
+13. [Étape 14 — Chaîne MLOps complète réalisée](#étape-14--chaîne-mlops-complète-réalisée)
+14. [Réponses consolidées aux Questions 1 à 19](#réponses-consolidées-aux-questions-1-à-19)
 
 ---
 
@@ -30,7 +34,7 @@
 python --version
 ```
 
-### Sortie console obtenue :
+### Sortie console réelle :
 ```text
 Python 3.12.6
 ```
@@ -70,7 +74,7 @@ mlops-tp1/
 > **Réponse Q2 — Rôle de chaque dossier :**
 > - `data/` : Centralise les jeux de données brutes (`raw/`) et transformées (`processed/`).
 > - `models/` : Héberge les modèles sérialisés (`iris_model.pkl`) prêts au déploiement.
-> - `src/` : Contient les scripts du pipeline modulaire (`prepare.py`, `train.py`, `evaluate.py`, `predict.py`).
+> - `src/` : Contient les scripts du pipeline modulaire (`prepare.py`, `train.py`, `evaluate.py`, `predict.py`, `drift.py`).
 > - `experiments/` : Archive les résumés de runs, rapports et graphiques.
 > - `requirements.txt` : Fige la liste des dépendances pour garantir la reproductibilité.
 > - `README.md` : Documente le projet, les métriques et les réponses du TP.
@@ -266,7 +270,21 @@ Matrice de confusion :
 
 ---
 
-## Étape 9 — Inférence en production (`src/predict.py`)
+## Étape 9 — Charger le modèle et prédire (`src/predict.py`)
+
+### Code de `src/predict.py` :
+```python
+import joblib
+from sklearn.datasets import load_iris
+
+model = joblib.load("models/iris_model.pkl")
+iris = load_iris()
+sample = [iris.data[0]]
+prediction = model.predict(sample)
+
+print("Classe :", prediction[0])
+print("Nom :", iris.target_names[prediction[0]])
+```
 
 ### Commande :
 ```powershell
@@ -275,52 +293,218 @@ python src/predict.py
 
 ### Sortie console réelle :
 ```text
-============================================================
-[ETAPE] INFERENCE EN PRODUCTION (predict.py)
-============================================================
-Inference sur 3 nouveaux echantillons de production :
-
-Echantillon 1 : [5.1, 3.5, 1.4, 0.2]
-  -> Classe predite : SETOSA (ID: 0)
-  -> Confiance      : 100.00%
-  -> Probabilites   : {'setosa': 1.0, 'versicolor': 0.0, 'virginica': 0.0}
-
-Echantillon 2 : [6.0, 2.9, 4.5, 1.5]
-  -> Classe predite : VERSICOLOR (ID: 1)
-  -> Confiance      : 99.00%
-  -> Probabilites   : {'setosa': 0.0, 'versicolor': 0.99, 'virginica': 0.01}
-
-Echantillon 3 : [6.9, 3.1, 5.4, 2.1]
-  -> Classe predite : VIRGINICA (ID: 2)
-  -> Confiance      : 100.00%
-  -> Probabilites   : {'setosa': 0.0, 'versicolor': 0.0, 'virginica': 1.0}
-
-============================================================
-[OK] Inference terminee avec succes.
-============================================================
+Classe : 0
+Nom : setosa
 ```
 
 ---
 
-## Monitoring et Data Drift (Questions 18 & 19)
+## Étape 10 — Première activité de Data Drift (`src/drift.py`)
 
-### Situation analysée :
-- Entraînement : Âge moyen = 35 ans.
-- Production : Âge moyen = 58 ans.
+### Principe :
+Le **Data Drift** correspond à une modification de la distribution statistique des données d'entrée entre l'entraînement et la production ($P_{prod}(X) \neq P_{train}(X)$).
 
-> **Réponse Q18 : Y a-t-il potentiellement un Data Drift ?**  
-> **Oui, absolument.** Il s'agit d'un **Covariate Shift** (dérive des variables explicatives $P(X)$). La moyenne est décalée de +23 ans, indiquant que la population en production est structurellement différente de celle sur laquelle le modèle a appris.
+### Code d'observation des statistiques :
+```python
+import pandas as pd
+from sklearn.datasets import load_iris
 
-> **Réponse Q19 : Pourquoi cette évolution peut-elle affecter les prédictions ?**  
-> Les frontières de décision et les seuils fixés dans les arbres du modèle ont été calibrés pour des profils de 35 ans. Sur des personnes de 58 ans, les relations entre variables changent et le modèle extrapole en dehors de son domaine de confiance. Cela entraîne une dégradation silencieuse des performances, nécessitant des outils de monitoring (alertes sur les distributions) et une boucle de réentraînement continu (*Continuous Training*).
+iris = load_iris()
+df = pd.DataFrame(iris.data, columns=iris.feature_names)
+print(df.describe())
+```
+
+### Commande :
+```powershell
+python src/drift.py
+```
+
+### Sortie console réelle :
+```text
+=================================================================
+[ACTIVITÉ DATA DRIFT] STATISTIQUES DESCRIPTIVES DU DATASET INITIAL
+=================================================================
+       sepal length (cm)  sepal width (cm)  petal length (cm)  petal width (cm)
+count         150.000000        150.000000         150.000000        150.000000
+mean            5.843333          3.057333           3.758000          1.199333
+std             0.828066          0.435866           1.765298          0.762238
+min             4.300000          2.000000           1.000000          0.100000
+25%             5.100000          2.800000           1.600000          0.300000
+50%             5.800000          3.000000           4.350000          1.300000
+75%             6.400000          3.300000           5.100000          1.800000
+max             7.900000          4.400000           6.900000          2.500000
+
+=================================================================
+```
+
+### Question :
+**Quelles variables pourraient changer en production ? Quel impact ce changement pourrait-il avoir sur les prédictions ?**
+
+> **Réponse détaillée :**
+> 1. **Variables susceptibles de changer :**
+>    - Les longueurs et largeurs de pétales (`petal length`, `petal width`) et de sépales (`sepal length`, `sepal width`) peuvent dériver si les fleurs cueillies en production proviennent d'une autre région géographique, d'un climat différent (sécheresse ou humidité modifiant la taille) ou d'une période de floraison différente.
+>    - Les mesures peuvent également dériver suite à un changement de capteur ou de méthode de mesure (biais d'instrumentation).
+> 2. **Impact sur les prédictions :**
+>    - Les arbres de décision du Random Forest s'appuient sur des seuils stricts appris sur la distribution d'origine (ex: `petal length <= 2.45` pour Setosa).
+>    - Si la distribution glisse (ex: une augmentation moyenne de la taille), le modèle va prédire avec une confiance faussée, confondre des classes (ex: Versicolor classée Virginica), ou générer une dégradation silencieuse sans qu'aucune erreur logicielle ne se déclenche.
+>    - Cela illustre pourquoi le **monitoring continu des distributions** (tests KS, PSI) et une boucle de réentraînement automatique (*Continuous Training*) sont indispensables en MLOps.
 
 ---
 
-## Synthèse finale des Mini-Défis
+## Étape 11 — Versionnement avec Git
 
-| Défi | Intitulé | Statut | Fichier associé |
-| :--- | :--- | :---: | :--- |
-| **Défi 1** | Créer `prepare.py`, `train.py`, `evaluate.py`, `predict.py` | ✅ Réalisé | `src/` |
-| **Défi 2** | Créer la fonction réutilisable `train_model()` | ✅ Réalisé | `src/train.py` |
-| **Défi 3** | Logger automatiquement Accuracy, Precision, Recall, F1 dans MLflow | ✅ Réalisé | `src/train.py` + `mlruns/` |
-| **Défi 4** | Tester au moins 3 configurations (50, 100, 200) et comparer | ✅ Réalisé | `experiments/benchmark_results.csv` |
+### 1. Initialiser le dépôt
+```powershell
+git init
+```
+**Sortie réelle :**
+```text
+Initialized empty Git repository in C:/Users/othma/OneDrive/Bureau/EMSI/MLOPS/TP/Chapitre 1/mlops-tp1/.git/
+```
+
+### 2. Créer `.gitignore`
+Contenu du fichier `.gitignore` :
+```text
+.venv/
+__pycache__/
+*.pyc
+mlruns/
+models/*.pkl
+```
+
+### 3. Vérifier le statut
+```powershell
+git status
+```
+**Sortie réelle :**
+```text
+On branch master
+
+No commits yet
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	.gitignore
+	RAPPORT_LIGNE_DE_COMMANDE_STEP_BY_STEP.md
+	README.md
+	data/
+	experiments/
+	requirements.txt
+	src/
+```
+
+### 4. Premier commit
+```powershell
+git add .
+git commit -m "TP1 MLOps - premier modèle Iris"
+```
+**Sortie réelle :**
+```text
+[master (root-commit) e276594] TP1 MLOps - premier modèle Iris
+ 15 files changed, 1312 insertions(+)
+ create mode 100644 .gitignore
+ create mode 100644 RAPPORT_LIGNE_DE_COMMANDE_STEP_BY_STEP.md
+ create mode 100644 README.md
+ create mode 100644 data/processed/test.csv
+ create mode 100644 data/processed/train.csv
+ create mode 100644 data/raw/iris_raw.csv
+ create mode 100644 experiments/benchmark_results.csv
+ create mode 100644 experiments/confusion_matrix.png
+ create mode 100644 experiments/evaluation_report.txt
+ create mode 100644 requirements.txt
+ create mode 100644 src/drift.py
+ create mode 100644 src/evaluate.py
+ create mode 100644 src/predict.py
+ create mode 100644 src/prepare.py
+ create mode 100644 src/train.py
+```
+
+### 5. Vérifier l'historique
+```powershell
+git log --oneline
+```
+**Sortie réelle :**
+```text
+e276594 TP1 MLOps - premier modèle Iris
+```
+
+---
+
+## Étape 12 — Organisation finale du projet
+
+```text
+mlops-tp1/
+│
+├── .venv/                         <- Environnement virtuel Python isolé
+├── data/
+│   ├── raw/
+│   │   └── iris_raw.csv           <- Données brutes exportées
+│   └── processed/
+│       ├── train.csv              <- Données d'entraînement (120 lignes)
+│       └── test.csv               <- Données de test (30 lignes)
+│
+├── experiments/
+│   ├── benchmark_results.csv      <- Résultats des runs MLflow (50, 100, 200)
+│   ├── evaluation_report.txt      <- Rapport de classification textuel
+│   └── confusion_matrix.png       <- Matrice de confusion générée
+│
+├── models/
+│   └── iris_model.pkl             <- Modèle sérialisé prêt pour l'inférence
+│
+├── src/
+│   ├── prepare.py                 <- Découpage stratifié et préparation
+│   ├── train.py                   <- Entraînement et tracking MLflow
+│   ├── evaluate.py                <- Rapport de classification complet
+│   ├── predict.py                 <- Script d'inférence (conforme atelier)
+│   └── drift.py                   <- Analyse des statistiques de base et Data Drift
+│
+├── mlruns/                        <- Base locale d'expériences MLflow
+├── .gitignore                     <- Exclusion des binaires, modèles et venv
+├── requirements.txt               <- Dépendances figées du projet
+├── README.md                      <- Rapport technique et académique
+└── RAPPORT_LIGNE_DE_COMMANDE_STEP_BY_STEP.md <- Ce rapport d'exécution
+```
+
+---
+
+## Étape 13 — Livrables remis
+
+Le dossier `mlops-tp1/` contient :
+1. Les scripts Python modulaires : `prepare.py`, `train.py`, `evaluate.py`, `predict.py`, `drift.py`.
+2. Le fichier de dépendances figées : `requirements.txt`.
+3. Le fichier d'exclusion Git : `.gitignore`.
+4. Le modèle généré et sérialisé : `models/iris_model.pkl`.
+5. Les résultats des expériences MLflow : répertoire `mlruns/` et `experiments/benchmark_results.csv`.
+6. La matrice de confusion graphique : `experiments/confusion_matrix.png`.
+7. Le rapport complet et l'analyse de Data Drift dans `README.md` et `RAPPORT_LIGNE_DE_COMMANDE_STEP_BY_STEP.md`.
+
+---
+
+## Étape 14 — Chaîne MLOps complète réalisée
+
+```text
+Windows (OS)
+   ↓
+Environnement virtuel (.venv)
+   ↓
+Données (Iris -> data/raw/ & data/processed/)
+   ↓
+Entraînement (Random Forest avec train_model())
+   ↓
+Évaluation (Accuracy, Precision, Recall, F1-score, Matrice de confusion)
+   ↓
+Sauvegarde (models/iris_model.pkl)
+   ↓
+MLflow (Tracking des runs, paramètres, métriques, artefacts)
+   ↓
+Comparaison (Benchmark 50 vs 100 vs 200 arbres)
+   ↓
+Prédiction (src/predict.py -> Classe: 0, Nom: setosa)
+   ↓
+Data Drift (src/drift.py -> Analyse de distribution et décalages)
+   ↓
+Git (Versionnement, .gitignore et commit initial)
+```
+
+> **Principe illustré :**  
+> **Automatiser, expérimenter, versionner, mesurer et surveiller un modèle de Machine Learning** de bout en bout selon les fondamentaux MLOps.
